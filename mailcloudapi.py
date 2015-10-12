@@ -1,6 +1,8 @@
+import os
 import json
 import requests
-from urllib import parse
+#from urllib import parse
+import urllib
 import mcsettings as URL
 
 class Cloud():
@@ -63,10 +65,12 @@ class Cloud():
 			values = {"Content_Type":"multipart/form-data", "Content" : {"file":filename}}
 			self.response = requests.post(self.loader, params = values, files = fd, cookies = self.cookies)
 
+#		print("load res" + self.response.text)
 		ls = self.response.text.split(";")
+#		print("load res" + self.response.text)
 
 		if self.response.status_code == requests.codes.ok and ls:
-			return {"name":ls[1].strip(),
+			return {"name":filename,
 					"hash":ls[0].strip(), 
 					"size":ls[2].strip()
 					}
@@ -75,26 +79,22 @@ class Cloud():
 		
 
 	def __link_file__(self,file_params,cloud_path):
-		"""Finaly add link of loaded file into cloud """
-		if self.add_folder(cloud_path):
-			body = parse.urlencode({
-					"folder":cloud_path,
-					"files": json.dumps([{
-							"name":file_params["name"],
-							"size":file_params["size"],
-							"hash":file_params["hash"],
-							}]),
-					"api":1,
-					"email": self.email,
-					"storage":"home",
-					"token": self.token,
-					})
-			self.response = requests.post(URL.ADDFILE,data = body, cookies = self.cookies)
-			if self.response.status_code == requests.codes.ok:
-				return True
-			else:
-				return False
-
+		"""Finaly add link of loaded file into cloud"""
+		body = urllib.urlencode({
+			"home":cloud_path + file_params["name"],
+				"hash":file_params["hash"],
+				"size":file_params["size"],
+				"conflict":"rename",
+				"api":2,
+				"build":"hotfix-29-2.201502191834",
+				"email": self.email,
+				"x-email": self.email,
+				"token": self.token,
+				})
+#		print body
+		self.response = requests.post(URL.ADDFILE, data = body, cookies = self.cookies)
+		if self.response.status_code == requests.codes.ok:
+			return True
 		else:
 			return False
 
@@ -105,12 +105,12 @@ class Cloud():
 		parpath = ""
 		for foldername, parent in self.__gen_parents__(cls):	
 			parpath+="/"+parent
-			body = parse.urlencode({
+			body = urllib.urlencode({
 					"add": json.dumps([{
 							"folder":parpath,
 							"name": foldername,
 					}]),
-					"api":1,
+					"api":2,
 					"email": self.email,
 					"storage":"home",
 					"token": self.token,
@@ -141,13 +141,14 @@ class Cloud():
 		 """
 		self.__get_loader__()
 		params = self.__load_file__(local_path)
+#		print "", params
 		self.__link_file__(params,cloud_path)
 
 	def share(self,filename_with_path=""):
 		"""share the file from cloud """
-		body = parse.urlencode({
+		body = urllib.urlencode({
 					"ids": json.dumps([filename_with_path]),
-					"api":1,
+					"api":2,
 					"email": self.email,
 					"storage":"home",
 					"token": self.token,
@@ -157,12 +158,26 @@ class Cloud():
 			return self.response.json()["body"][0]["url"]["get"]
 		else:
 			return None
+	
+	def load_folder(self,local_path,cloud_path):
+		"""Load folder into cloud recursively"""
+		abs_path = os.path.abspath(local_path)
+		local_path_length = len(abs_path) + 1
+		
+		self.add_folder(cloud_path)
+		
+		for root, dirs, files in os.walk(abs_path):
+		    local_current_dir = root[local_path_length:]
+		    cloud_current_dir = cloud_path + '/' + local_current_dir
+		    self.add_folder(cloud_current_dir)
+		    for file in files:
+			    self.add_file(root + '/' + file, cloud_current_dir)
 
 	def unshare(self, filename_with_path=""):
 		"""unshare the file """
-		body = parse.urlencode({
+		body = urllib.urlencode({
 					"ids": json.dumps([filename_with_path]),
-					"api":1,
+					"api":2,
 					"email": self.email,
 					"storage":"home",
 					"token": self.token,
@@ -175,9 +190,9 @@ class Cloud():
 
 	def remove(self, full_path=""):
 		"""Remove files, folders all of them, use CAREFULL """
-		body = parse.urlencode({
+		body = urllib.urlencode({
 					"ids": json.dumps([full_path]),
-					"api":1,
+					"api":2,
 					"email": self.email,
 					"storage":"home",
 					"token": self.token,
@@ -190,10 +205,10 @@ class Cloud():
 
 	def move(self, current_path="", target_path=""):
 		"""Move file or folder in cloud """
-		body = parse.urlencode({
+		body = urllib.urlencode({
 					"folder": target_path,
 					"ids": json.dumps([current_path]),
-					"api":1,
+					"api":2,
 					"email": self.email,
 					"storage":"home",
 					"token": self.token,
@@ -210,12 +225,12 @@ class Cloud():
 		-- current_name = full path + name 
 		-- target_name = only name of file
 		"""
-		body = parse.urlencode({
+		body = urllib.urlencode({
 					"rename": json.dumps([{
 						"id": current_name,
 						"name":target_name,
 						}]),
-					"api":1,
+					"api":2,
 					"email": self.email,
 					"storage":"home",
 					"token": self.token,
